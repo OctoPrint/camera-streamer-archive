@@ -1,0 +1,63 @@
+name: "Run full source export & create tagged release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_branch:
+        description: "camera-streamer branch to export"
+        required: false
+        default: 'master'
+
+jobs:
+  export:
+    name: "Export"
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        repository: "ayufan/camera-streamer"
+        ref: "${{ github.event.inputs.export_branch }}"
+        submodules: recursive
+    - name: Setup Python
+      uses: actions/setup-python@v4
+    - run: |
+        pipx run git-archive-all camera-streamer.zip
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: camera-streamer.zip
+        path: camera-streamer.zip
+
+  release:
+    name: "Release"
+    needs: export
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: camera-streamer.zip
+
+    - name: "📝 Prepare release"
+      run: |
+        now=$(date +"%Y%m%d%H%M%S")
+        display=$(date +"%Y-%m-%d, %H:%M:%S")
+        branch="${{ github.event.inputs.export_branch }}"
+
+        RELEASE_NAME="camera-streamer source export of branch $branch as of $display"
+        echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+
+        RELEASE_TAG="$branch-$now"
+        echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+
+    - name: "🔖 Create release & attach export"
+      uses: softprops/action-gh-release@v1
+      with:
+        name: "${{ env.RELEASE_NAME }}"
+        tag_name: "${{ env.RELEASE_TAG }}"
+        fail_on_unmatched_files: true
+        files: |
+          camera-streamer.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
