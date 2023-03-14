@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      camera-streamer-commit: ${{ steps.extract.outputs.camera-streamer-version }}
+      camera-streamer-commit: ${{ steps.extract.outputs.camera-streamer-commit }}
       dependencies: ${{ steps.extract.outputs.dependencies }}
 
     env:
@@ -48,7 +48,7 @@ jobs:
         
         # fetch commit & export it as output
         revision=$(git rev-parse --short HEAD)
-        echo "camera-streamer-version=$revision" >> "$GITHUB_OUTPUT"
+        echo "camera-streamer-commit=$revision" >> "$GITHUB_OUTPUT"
         
         # fetch info about dependencies
         libcamera0_version=$(docker run --rm $image dpkg -s libcamera0 | grep -i version | awk '{print $2}')
@@ -84,6 +84,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
 
+    outputs:
+      package-version: ${{ steps.manifest.outputs.package-version }}
+      build-date: ${{ steps.manifest.outputs.build-date }}
+
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v3
@@ -105,13 +109,18 @@ jobs:
         pip install ruamel.yaml
 
     - name: Prepare manifest
+      id: manifest
       run: |
         today=$(date +"%Y%m%d")
+        echo "build-date=$today" >> $GITHUB_OUTPUT
+
+        version="0~git$today+${{ needs.build.outputs.camera-streamer-commit }}-1"
+        echo "package-version=$version" >> $GITHUB_OUTPUT
 
         cat <<EOF > manifest.yml
         control:
           Package: camera-streamer
-          Version: 0~git$today+${{ needs.build.outputs.camera-streamer-version }}-1
+          Version: $version
           Architecture: armhf
           Maintainer: Gina Haeussge <gina@octoprint.org>
           Depends: ${{ needs.build.outputs.dependencies }}
@@ -135,3 +144,35 @@ jobs:
         name: camera-streamer.deb
         path: camera-streamer_*.deb
 
+  release:
+    name: "Release"
+    needs: 
+    - build
+    - package
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: camera-streamer.deb
+
+    - name: "📝 Prepare release"
+      run: |
+        RELEASE_NAME="camera-streamer ${{ needs.package.outputs.package-version }}"
+        echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
+
+        today=${{ needs.package.outputs.build-date }}
+        commit=${{ needs.build.outputs.camera-streamer-commit }}
+        RELEASE_TAG="$today.$commit"
+        echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+
+    - name: "🔖 Create release & attach export"
+      uses: softprops/action-gh-release@v1
+      with:
+        name: "${{ env.RELEASE_NAME }}"
+        tag_name: "${{ env.RELEASE_TAG }}"
+        fail_on_unmatched_files: true
+        files: |
+          camera-streamer*.deb
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
