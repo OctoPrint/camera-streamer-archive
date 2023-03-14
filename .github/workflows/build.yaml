@@ -1,0 +1,137 @@
+name: "Build binary & package"
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_branch:
+        description: "camera-streamer branch to build"
+        required: false
+        default: 'master'
+
+jobs:
+  build:
+    name: "Build"
+    runs-on: ubuntu-latest
+
+    outputs:
+      camera-streamer-commit: ${{ steps.extract.outputs.camera-streamer-version }}
+      dependencies: ${{ steps.extract.outputs.dependencies }}
+
+    env:
+      DEBIAN_VERSION: bullseye
+      DOCKER_ARCH: arm32v7/
+      BUILD_TYPE: rpi
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        repository: "ayufan/camera-streamer"
+        ref: "${{ github.event.inputs.export_branch }}"
+        submodules: recursive
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Build Dockerfile
+      run: docker build --build-arg DOCKER_ARCH --build-arg DEBIAN_VERSION --build-arg BUILD_TYPE . -t camera-streamer-armhf-rpi:$DEBIAN_VERSION
+
+    - name: Extract binary & info
+      id: extract
+      run: |
+        image="camera-streamer-armhf-rpi:$DEBIAN_VERSION"
+        
+        # copy binary from build image
+        container=$(docker container create $image bash)
+        docker cp $container:/src/camera-streamer .
+        docker rm -f $container
+        
+        # fetch commit & export it as output
+        revision=$(git rev-parse --short HEAD)
+        echo "camera-streamer-version=$revision" >> "$GITHUB_OUTPUT"
+        
+        # fetch info about dependencies
+        libcamera0_version=$(docker run --rm $image dpkg -s libcamera0 | grep -i version | awk '{print $2}')
+        echo $libcamera0_version
+        
+        liblivemedia=$(docker run --rm $image apt-cache depends liblivemedia-dev | grep -i "depends: liblivemedia" | awk '{print $2}')
+        echo $liblivemedia
+        
+        libavformat=$(docker run --rm $image apt-cache depends libavformat-dev | grep -i "depends: libavformat" | awk '{print $2}')
+        echo $libavformat
+        
+        libavutil=$(docker run --rm $image apt-cache depends libavutil-dev | grep -i "depends: libavutil" | awk '{print $2}')
+        echo $libavutil
+        
+        libavcodec=$(docker run --rm $image apt-cache depends libavcodec-dev | grep -i "depends: libavcodec" | awk '{print $2}')
+        echo $libavcodec
+        
+        libssl=$(docker run --rm $image apt-cache depends libssl-dev | grep -i "depends: libssl" | awk '{print $2}')
+        echo $libssl
+        
+        # build dependency string & export it as output
+        dependencies="libcamera0 (= $libcamera0_version), $liblivemedia, $libavformat, $libavcodec, $libssl"
+        echo "dependencies=$dependencies" >> "$GITHUB_OUTPUT"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: camera-streamer
+        path: camera-streamer
+  
+  package:
+    name: "Package"
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: camera-streamer
+
+    - name: 🏗 Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+
+    - name: Install termux-create-package
+      run: |
+        export install_path="/usr/local/bin"
+        sudo mkdir -p "$install_path"
+        sudo curl -L 'https://github.com/termux/termux-create-package/releases/latest/download/termux-create-package' -o "$install_path/termux-create-package"
+        sudo chmod 755 "$install_path/termux-create-package"
+
+        pip install ruamel.yaml
+
+    - name: Prepare manifest
+      run: |
+        today=$(date +"%Y%m%d")
+
+        cat <<EOF > manifest.yml
+        control:
+          Package: camera-streamer
+          Version: 0~git$today+${{ needs.build.outputs.camera-streamer-version }}-1
+          Architecture: armhf
+          Maintainer: Gina Haeussge <gina@octoprint.org>
+          Depends: ${{ needs.build.outputs.dependencies }}
+          Homepage: https://github.com/ayufan/camera-streamer
+          Description: 
+        
+        installation_prefix: /usr
+
+        data_files:
+          bin/camera-streamer:
+            source: camera-streamer
+        EOF
+
+    - name: Build package
+      run: |
+        termux-create-package manifest.yml
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: camera-streamer.deb
+        path: camera-streamer_*.deb
+
