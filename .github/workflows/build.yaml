@@ -116,7 +116,7 @@ jobs:
           Maintainer: Gina Haeussge <gina@octoprint.org>
           Depends: ${{ needs.build.outputs.dependencies }}
           Homepage: https://github.com/ayufan/camera-streamer
-          Description: 
+          Description: High-performance low-latency camera streamer for Raspberry Pis
         
         installation_prefix: /usr
 
