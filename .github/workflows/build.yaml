@@ -168,6 +168,7 @@ jobs:
 
     - name: "🔖 Create release & attach export"
       uses: softprops/action-gh-release@v1
+      id: create_release
       with:
         name: "${{ env.RELEASE_NAME }}"
         tag_name: "${{ env.RELEASE_TAG }}"
@@ -176,3 +177,11 @@ jobs:
           camera-streamer*.deb
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: "📨 Notify apt repo"
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: OctoPrint/apt.octoprint.org
+        event-type: add-package
+        client-payload: '{"url": "${{ fromJSON(steps.create-release.outputs.assets)[0].browser_download_url }}", "dist": "bullseye", "component": "rpi"}'
