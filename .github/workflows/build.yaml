@@ -146,10 +146,15 @@ jobs:
 
   release:
     name: "Release"
+    runs-on: ubuntu-latest
+
     needs: 
     - build
     - package
-    runs-on: ubuntu-latest
+
+    outputs:
+      release-assets: ${{ steps.create_release.outputs.assets }}
+
     steps:
     - name: Download artifact
       uses: actions/download-artifact@v3
@@ -178,10 +183,27 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  notify:
+    name: "Notify"
+    runs-on: ubuntu-latest
+
+    needs: release
+
+    steps:
+    - name: "♻ Prepare data"
+      run: |
+        cat > assets.json <<EOF
+        ${{ needs.release.outputs.release-assets }}
+        EOF
+
+        URL=$(jq -r '.[0].browser_download_url' assets.json)
+
+        echo "DEB_URL=$URL" >> $GITHUB_ENV
+
     - name: "📨 Notify apt repo"
       uses: peter-evans/repository-dispatch@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         repository: OctoPrint/apt.octoprint.org
         event-type: add-package
-        client-payload: '{"url": "${{ fromJSON(steps.create-release.outputs.assets)[0].browser_download_url }}", "dist": "bullseye", "component": "rpi"}'
+        client-payload: '{"url": "${{ env.DEB_URL }}", "dist": "bullseye", "component": "rpi"}'
