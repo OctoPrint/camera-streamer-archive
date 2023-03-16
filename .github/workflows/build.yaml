@@ -7,6 +7,10 @@ on:
         description: "camera-streamer branch to build"
         required: false
         default: 'master'
+      octopi_version:
+        description: "OctoPi version to build against (leave empty to use latest stable release)"
+        required: false
+        default: ''
       debian_revision:
         description: "Debian revision to use"
         required: false
@@ -21,60 +25,134 @@ jobs:
       camera-streamer-commit: ${{ steps.extract.outputs.camera-streamer-commit }}
       dependencies: ${{ steps.extract.outputs.dependencies }}
 
-    env:
-      DEBIAN_VERSION: bullseye
-      DOCKER_ARCH: arm32v7/
-      BUILD_TYPE: rpi
-
     steps:
-    - name: Checkout
+    - name: "⬇ Checkout"
       uses: actions/checkout@v3
+
+    - name: "🔎 Determine OctoPi version"
+      uses: actions/github-script@v6
       with:
-        repository: "ayufan/camera-streamer"
-        ref: "${{ github.event.inputs.build_branch }}"
-        submodules: recursive
+        script: |
+          let release = null;
 
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
+          let version = context.payload.inputs.octopi_version;
 
-    - name: Build Dockerfile
-      run: docker build --build-arg DOCKER_ARCH --build-arg DEBIAN_VERSION --build-arg BUILD_TYPE . -t camera-streamer-armhf-rpi:$DEBIAN_VERSION
+          if (version) {
+            console.log(`Fetching release of ${version}`);
+
+            const query = `query {
+              repository(owner: "guysoft", name: "Octopi") {
+                release(tagName:"${version}") {
+                  tagName
+                  releaseAssets(first:5) {
+                    nodes {
+                      name
+                      downloadUrl
+                    }
+                  }
+                }
+              }
+            }`;
+
+            const result = await github.graphql(query);
+            console.log({result});
+
+            release = result.repository.release;
+
+          } else {
+            console.log("Fetching latest release");
+
+            const query = `query {
+              repository(owner:"guysoft", name:"OctoPi") {
+                latestRelease {
+                  tagName
+                  releaseAssets(first:5) {
+                    nodes {
+                      name
+                      downloadUrl
+                    }
+                  }
+                }
+              }
+            }`;
+
+            const result = await github.graphql(query);
+            console.log({result});
+
+            release = result.repository.latestRelease;
+          }
+
+          if (!release || !release.tagName || !release.releaseAssets || !release.releaseAssets.nodes) core.setFailed("Could not find OctoPi release");
+
+          const octopiVersion = release.tagName;
+
+          let octopiUrl = null;
+          for (const asset of release.releaseAssets.nodes) {
+            if (asset.name.startsWith("octopi-") && asset.name.includes("-armhf-") && asset.name.endsWith(".zip")) {
+              octopiUrl = asset.downloadUrl;
+              break;
+            }
+          }
+
+          if (!octopiUrl) core.setFailed("Could not find OctoPi download URL");
+
+          console.log(`OctoPi version: ${octopiVersion}`)
+          console.log(`OctoPi download URL: ${octopiUrl}`)
+
+          core.exportVariable("OCTOPI_VERSION", octopiVersion)
+          core.exportVariable("OCTOPI_URL", octopiUrl)
+
+    - name: "⬇ Download OctoPi"
+      id: octopi_download
+      run: |
+        mkdir build
+        cd build
+        curl -L -o octopi.zip ${{ env.OCTOPI_URL }}
+
+        unzip octopi.zip
+        rm octopi.zip
+
+        IMAGE=$(ls *.img | head -n 1)
+        mv $IMAGE input.img
+
+    - name: "🏗 Run CustoPiZer"
+      uses: OctoPrint/CustoPiZer@main
+      with:
+        workspace: "${{ github.workspace }}/build"
+        scripts:  "${{ github.workspace }}/scripts"
+        environment: '{ "CAMERA_STREAMER_BRANCH": "${{ github.event.inputs.build_branch }}" }'
 
     - name: Extract binary & info
       id: extract
       run: |
-        image="camera-streamer-armhf-rpi:$DEBIAN_VERSION"
-        
-        # copy binary from build image
-        container=$(docker container create $image bash)
-        docker cp $container:/src/camera-streamer .
-        docker rm -f $container
-        
+        # copy binary from build
+        cp build/export/camera-streamer .
+
         # fetch commit & export it as output
-        commit=$(git rev-parse --short HEAD)
+        commit=$(cat build/export/camera-streamer.commit)
         echo "camera-streamer-commit=$commit" >> "$GITHUB_OUTPUT"
-        
+
         # fetch info about dependencies
-        libcamera0_version=$(docker run --rm $image dpkg -s libcamera0 | grep -i version | awk '{print $2}')
+        libcamera0_version=$(cat build/export/libcamera0.version)
         echo $libcamera0_version
-        
-        liblivemedia=$(docker run --rm $image apt-cache depends liblivemedia-dev | grep -i "depends: liblivemedia" | awk '{print $2}')
+
+        liblivemedia=$(cat build/export/liblivemedia.version)
         echo $liblivemedia
-        
-        libavformat=$(docker run --rm $image apt-cache depends libavformat-dev | grep -i "depends: libavformat" | awk '{print $2}')
+
+        libavformat=$(cat build/export/libavformat.version)
         echo $libavformat
-        
-        libavutil=$(docker run --rm $image apt-cache depends libavutil-dev | grep -i "depends: libavutil" | awk '{print $2}')
-        echo $libavutil
-        
-        libavcodec=$(docker run --rm $image apt-cache depends libavcodec-dev | grep -i "depends: libavcodec" | awk '{print $2}')
+
+        libavcodec=$(cat build/export/libavcodec.version)
         echo $libavcodec
-        
-        libssl=$(docker run --rm $image apt-cache depends libssl-dev | grep -i "depends: libssl" | awk '{print $2}')
+
+        libavutil=$(cat build/export/libavutil.version)
+        echo $libavutil
+
+        libssl=$(cat build/export/libssl.version)
         echo $libssl
-        
+
         # build dependency string & export it as output
-        dependencies="libcamera0 (= $libcamera0_version), $liblivemedia, $libavformat, $libavcodec, $libssl"
+        dependencies="libcamera0 (= $libcamera0_version), $liblivemedia, $libavformat, $libavcodec, $libavutil, $libssl"
         echo "dependencies=$dependencies" >> "$GITHUB_OUTPUT"
 
     - name: Upload artifact
