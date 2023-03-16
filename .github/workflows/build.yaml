@@ -7,6 +7,10 @@ on:
         description: "camera-streamer branch to build"
         required: false
         default: 'master'
+      debian_revision:
+        description: "Debian revision to use"
+        required: false
+        default: '1'
 
 jobs:
   build:
@@ -47,8 +51,8 @@ jobs:
         docker rm -f $container
         
         # fetch commit & export it as output
-        revision=$(git rev-parse --short HEAD)
-        echo "camera-streamer-commit=$revision" >> "$GITHUB_OUTPUT"
+        commit=$(git rev-parse --short HEAD)
+        echo "camera-streamer-commit=$commit" >> "$GITHUB_OUTPUT"
         
         # fetch info about dependencies
         libcamera0_version=$(docker run --rm $image dpkg -s libcamera0 | grep -i version | awk '{print $2}')
@@ -114,7 +118,8 @@ jobs:
         today=$(date +"%Y%m%d")
         echo "build-date=$today" >> $GITHUB_OUTPUT
 
-        version="0~git$today+${{ needs.build.outputs.camera-streamer-commit }}-1"
+        revision="${{ github.event.inputs.debian_revision }}"
+        version="0~git$today+${{ needs.build.outputs.camera-streamer-commit }}-$revision"
         echo "package-version=$version" >> $GITHUB_OUTPUT
 
         cat <<EOF > manifest.yml
@@ -122,7 +127,7 @@ jobs:
           Package: camera-streamer
           Version: $version
           Architecture: armhf
-          Maintainer: Gina Haeussge <gina@octoprint.org>
+          Maintainer: Gina Häußge <gina@octoprint.org>
           Depends: ${{ needs.build.outputs.dependencies }}
           Homepage: https://github.com/ayufan/camera-streamer
           Description: High-performance low-latency camera streamer for Raspberry Pis
@@ -168,7 +173,8 @@ jobs:
 
         today=${{ needs.package.outputs.build-date }}
         commit=${{ needs.build.outputs.camera-streamer-commit }}
-        RELEASE_TAG="$today.$commit"
+        revision=${{ github.event.inputs.debian_revision }}
+        RELEASE_TAG="$today.$commit.$revision"
         echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
     - name: "🔖 Create release & attach export"
@@ -203,7 +209,7 @@ jobs:
     - name: "📨 Notify apt repo"
       uses: peter-evans/repository-dispatch@v2
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.REPO_DISPATCH_ACCESS }}
         repository: OctoPrint/apt.octoprint.org
         event-type: add-package
         client-payload: '{"url": "${{ env.DEB_URL }}", "dist": "bullseye", "component": "rpi"}'
