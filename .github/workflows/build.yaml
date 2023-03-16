@@ -3,7 +3,7 @@ name: "Build binary & package"
 on:
   workflow_dispatch:
     inputs:
-      export_branch:
+      build_branch:
         description: "camera-streamer branch to build"
         required: false
         default: 'master'
@@ -31,7 +31,7 @@ jobs:
       uses: actions/checkout@v3
       with:
         repository: "ayufan/camera-streamer"
-        ref: "${{ github.event.inputs.export_branch }}"
+        ref: "${{ github.event.inputs.build_branch }}"
         submodules: recursive
 
     - name: Set up QEMU
@@ -177,12 +177,20 @@ jobs:
         RELEASE_TAG="$today.$commit.$revision"
         echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
+        RELEASE_BODY=$(cat <<EOF
+        [camera-streamer](https://github.com/ayufan/camera-streamer) built from branch ${{ github.event.inputs.build_branch }}.
+
+        Commit `$commit` built against `libcamera0` version `${{ needs.build.outputs.libcamera0_version }}`.
+        EOF)
+        echo "RELEASE_BODY=$RELEASE_BODY" >> $GITHUB_ENV
+
     - name: "🔖 Create release & attach export"
       uses: softprops/action-gh-release@v1
       id: create_release
       with:
         name: "${{ env.RELEASE_NAME }}"
         tag_name: "${{ env.RELEASE_TAG }}"
+        body: "${{ env.RELEASE_BODY }}"
         fail_on_unmatched_files: true
         files: |
           camera-streamer*.deb
