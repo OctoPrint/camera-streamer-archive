@@ -177,12 +177,11 @@ jobs:
         RELEASE_TAG="$today.$commit.$revision"
         echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
-        RELEASE_BODY=$(cat <<EOF
-        [camera-streamer](https://github.com/ayufan/camera-streamer) built from branch ${{ github.event.inputs.build_branch }}.
+        cat > release.md << EOF
+        [camera-streamer](https://github.com/ayufan/camera-streamer) built from branch master.
 
-        Commit `$commit` built against `libcamera0` version `${{ needs.build.outputs.libcamera0_version }}`.
-        EOF)
-        echo "RELEASE_BODY=$RELEASE_BODY" >> $GITHUB_ENV
+        Commit \`$commit\` built against \`libcamera0\` version \`0~git20230303+aabbccddee\`.
+        EOF
 
     - name: "🔖 Create release & attach export"
       uses: softprops/action-gh-release@v1
@@ -190,7 +189,7 @@ jobs:
       with:
         name: "${{ env.RELEASE_NAME }}"
         tag_name: "${{ env.RELEASE_TAG }}"
-        body: "${{ env.RELEASE_BODY }}"
+        body_path: "release.md"
         fail_on_unmatched_files: true
         files: |
           camera-streamer*.deb
