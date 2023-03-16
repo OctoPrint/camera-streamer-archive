@@ -180,7 +180,7 @@ jobs:
         cat > release.md << EOF
         [camera-streamer](https://github.com/ayufan/camera-streamer) built from branch master.
 
-        Commit \`$commit\` built against \`libcamera0\` version \`0~git20230303+aabbccddee\`.
+        Commit \`$commit\` built against \`${{ needs.build.outputs.dependencies }}\`.
         EOF
 
     - name: "🔖 Create release & attach export"
