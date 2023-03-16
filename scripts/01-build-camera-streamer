@@ -9,7 +9,7 @@ install_cleanup_trap
 mkdir -p /export
 
 # install dependencies
-apt-get -y update && apt-get -y install gnupg2 build-essential xxd cmake ccache git-core pkg-config \
+apt-get -y install gnupg2 build-essential xxd cmake ccache git-core pkg-config \
   libcamera-dev liblivemedia-dev libavformat-dev libavutil-dev libavcodec-dev libssl-dev v4l-utils
 
 # checkout and build camera-streamer

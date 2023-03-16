@@ -136,19 +136,19 @@ jobs:
         libcamera0_version=$(cat build/export/libcamera0.version)
         echo $libcamera0_version
 
-        liblivemedia=$(cat build/export/liblivemedia.version)
+        liblivemedia=$(cat build/export/liblivemedia.dep)
         echo $liblivemedia
 
-        libavformat=$(cat build/export/libavformat.version)
+        libavformat=$(cat build/export/libavformat.dep)
         echo $libavformat
 
-        libavcodec=$(cat build/export/libavcodec.version)
+        libavcodec=$(cat build/export/libavcodec.dep)
         echo $libavcodec
 
-        libavutil=$(cat build/export/libavutil.version)
+        libavutil=$(cat build/export/libavutil.dep)
         echo $libavutil
 
-        libssl=$(cat build/export/libssl.version)
+        libssl=$(cat build/export/libssl.dep)
         echo $libssl
 
         # build dependency string & export it as output
