@@ -22,7 +22,7 @@ jobs:
       uses: OctoPrint/actions/latest-apt-version@main
       with:
         package: libcamera0
-        url: http://raspbian.raspberrypi.org/raspbian/dists/bullseye/main/binary-armhf/Packages
+        url: http://archive.raspberrypi.org/debian/dists/bullseye/main/binary-armhf/Packages
     
     - name: "Create new result"
       id: new_result
