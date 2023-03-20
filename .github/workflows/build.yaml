@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      camera-streamer-commit: ${{ steps.extract.outputs.camera-streamer-commit }}
+      camera-streamer-version: ${{ steps.extract.outputs.camera-streamer-version }}
       dependencies: ${{ steps.extract.outputs.dependencies }}
 
     steps:
@@ -129,8 +129,8 @@ jobs:
         cp build/export/camera-streamer .
 
         # fetch commit & export it as output
-        commit=$(cat build/export/camera-streamer.commit)
-        echo "camera-streamer-commit=$commit" >> "$GITHUB_OUTPUT"
+        version=$(cat build/export/camera-streamer.version | cut -c2- | cut -d' ' -f1)
+        echo "camera-streamer-version=$version" >> "$GITHUB_OUTPUT"
 
         # fetch info about dependencies
         libcamera0_version=$(cat build/export/libcamera0.version)
@@ -197,7 +197,11 @@ jobs:
         echo "build-date=$today" >> $GITHUB_OUTPUT
 
         revision="${{ github.event.inputs.debian_revision }}"
-        version="0~git$today+${{ needs.build.outputs.camera-streamer-commit }}-$revision"
+        version="${{ needs.build.outputs.camera-streamer-version }}"
+        if [[ "$version" == *"-"* ]]; then
+          version=$(echo $version | awk -F'-' '{print $1 "~" $2 "+" $3}') # 0.1-16-gcdfb62ef -> 0.1~16+gcdfb62ef
+        fi
+        version="$version-$revision"
         echo "package-version=$version" >> $GITHUB_OUTPUT
 
         cat <<EOF > manifest.yml
@@ -208,7 +212,7 @@ jobs:
           Maintainer: Gina Häußge <gina@octoprint.org>
           Depends: ${{ needs.build.outputs.dependencies }}
           Homepage: https://github.com/ayufan/camera-streamer
-          Description: High-performance low-latency camera streamer for Raspberry Pis
+          Description: High-performance low-latency camera streamer for Raspberry Pis, built for use with OctoPrint
         
         installation_prefix: /usr
 
@@ -239,26 +243,31 @@ jobs:
       release-assets: ${{ steps.create_release.outputs.assets }}
 
     steps:
-    - name: Download artifact
+    - name: Download deb artifact
       uses: actions/download-artifact@v3
       with:
         name: camera-streamer.deb
 
+    - name: Download binary artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: camera-streamer
+
     - name: "📝 Prepare release"
       run: |
-        RELEASE_NAME="camera-streamer ${{ needs.package.outputs.package-version }}"
+        package_version="${{ needs.package.outputs.package-version }}"
+        branch="${{ github.event.inputs.build_branch }}"
+
+        RELEASE_NAME="camera-streamer $package_version"
         echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
 
-        today=${{ needs.package.outputs.build-date }}
-        commit=${{ needs.build.outputs.camera-streamer-commit }}
-        revision=${{ github.event.inputs.debian_revision }}
-        RELEASE_TAG="$today.$commit.$revision"
+        RELEASE_TAG="$package_version"
         echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
         cat > release.md << EOF
-        [camera-streamer](https://github.com/ayufan/camera-streamer) built from branch master.
+        [camera-streamer](https://github.com/ayufan/camera-streamer) v$package_version built from branch $branch.
 
-        Commit \`$commit\` built against \`${{ needs.build.outputs.dependencies }}\`.
+        Built against \`${{ needs.build.outputs.dependencies }}\`.
         EOF
 
     - name: "🔖 Create release & attach export"
@@ -271,6 +280,7 @@ jobs:
         fail_on_unmatched_files: true
         files: |
           camera-streamer*.deb
+          camera-streamer
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

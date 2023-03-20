@@ -25,6 +25,7 @@ pushd /tmp
         git rev-parse --short HEAD > /export/camera-streamer.commit
         make -j$(nproc)
         cp camera-streamer /export/camera-streamer
+        ./camera-streamer --version > /export/camera-streamer.version
     popd
 popd
 
