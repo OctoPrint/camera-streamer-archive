@@ -256,12 +256,14 @@ jobs:
     - name: "📝 Prepare release"
       run: |
         package_version="${{ needs.package.outputs.package-version }}"
+        version=${{ needs.build.outputs.camera-streamer-version }}
         branch="${{ github.event.inputs.build_branch }}"
+        revision=${{ github.event.inputs.debian_revision }}
 
         RELEASE_NAME="camera-streamer $package_version"
         echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
 
-        RELEASE_TAG="$package_version"
+        RELEASE_TAG="$version-$revision"
         echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
         cat > release.md << EOF
