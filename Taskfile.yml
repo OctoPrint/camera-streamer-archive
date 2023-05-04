@@ -4,7 +4,7 @@ tasks:
   build:
     cmds:
       - |
-        {{if eq OS "windows"}}powershell {{end}}docker run --rm --privileged -v {{.USER_WORKING_DIR | toSlash}}/workspace:/CustoPiZer/workspace -v {{.USER_WORKING_DIR | toSlash}}/scripts:/CustoPiZer/workspace/scripts ghcr.io/octoprint/custopizer:latest
+        {{if eq OS "windows"}}powershell {{end}}docker run --rm --privileged {{if .CAMERA_STREAMER_BRANCH}}-e CAMERA_STREAMER_BRANCH={{.CAMERA_STREAMER_BRANCH}}{{end}} -v {{.USER_WORKING_DIR | toSlash}}/workspace:/CustoPiZer/workspace -v {{.USER_WORKING_DIR | toSlash}}/scripts:/CustoPiZer/workspace/scripts ghcr.io/octoprint/custopizer:latest
     preconditions:
       - test -d workspace
       - test -f workspace/input.img
