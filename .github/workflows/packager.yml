@@ -1,0 +1,68 @@
+name: "Packaging debug"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: "Package"
+    runs-on: ubuntu-latest
+
+    outputs:
+      package-version: ${{ steps.manifest.outputs.package-version }}
+      build-date: ${{ steps.manifest.outputs.build-date }}
+
+    steps:
+    - name: Fake artifact
+      run: |
+        touch camera-streamer
+
+
+    - name: 🏗 Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Prepare manifest
+      id: manifest
+      run: |
+        today=$(date +"%Y%m%d")
+        echo "build-date=$today" >> $GITHUB_OUTPUT
+
+        revision="1"
+        version="0.1-16-gcdfb62ef"
+        if [[ "$version" == *"-"* ]]; then
+          version=$(echo $version | awk -F'-' '{print $1 "~" $2 "+" $3}') # 0.1-16-gcdfb62ef -> 0.1~16+gcdfb62ef
+        fi
+        version="$version-$revision"
+        echo "package-version=$version" >> $GITHUB_OUTPUT
+
+        cat <<EOF > manifest.yml
+        control:
+          Package: camera-streamer
+          Version: $version
+          Architecture: armhf
+          Maintainer: Gina Häußge <gina@octoprint.org>
+          Depends: libcamera0 (= 0~git20230302+923f5d70-1), liblivemedia77, libavformat58, libavcodec58, libavutil56, libssl1.1
+          Homepage: https://github.com/ayufan/camera-streamer
+          Description: High-performance low-latency camera streamer for Raspberry Pis, built for use with OctoPrint
+        
+        installation_prefix: /usr
+
+        data_files:
+          bin/camera-streamer:
+            source: camera-streamer
+        EOF
+
+    - name: Build package
+      run: |
+        pip install ruamel.yaml
+        chmod 755 ${{ github.workspace }}/.github/termux-create-package
+        ${{ github.workspace }}/.github/termux-create-package manifest.yml
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: camera-streamer.deb
+        path: camera-streamer_*.deb
+
