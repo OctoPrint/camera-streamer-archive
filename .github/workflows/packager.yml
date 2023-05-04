@@ -13,10 +13,12 @@ jobs:
       build-date: ${{ steps.manifest.outputs.build-date }}
 
     steps:
+    - name: "⬇ Checkout"
+      uses: actions/checkout@v3
+
     - name: Fake artifact
       run: |
         touch camera-streamer
-
 
     - name: 🏗 Set up Python 3.10
       uses: actions/setup-python@v4
