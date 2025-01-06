@@ -63,7 +63,7 @@ jobs:
         ${{ github.workspace }}/.github/termux-create-package manifest.yml
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: camera-streamer.deb
         path: camera-streamer_*.deb
